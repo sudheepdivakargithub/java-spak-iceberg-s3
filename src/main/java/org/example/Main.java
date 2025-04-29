@@ -1,6 +1,7 @@
 package org.example;
 
 import java.io.IOException;
+import java.util.List;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -16,34 +17,43 @@ public class Main {
 
     SparkSession spark = SparkSession.builder()
         .appName("IcebergReader")
-//        .master("spark://sc-fenceline-int-dev3.corp.picarro.com:7077")
-        .master("local[*]")
+        .master("spark://sc-fenceline-int-dev3.corp.picarro.com:7077")
+//        .master("local[*]")
         .config("spark.sql.catalog.my_catalog", "org.apache.iceberg.spark.SparkCatalog")
         .config("spark.sql.catalog.my_catalog.type", "hadoop")
-        .config("spark.sql.catalog.my_catalog.warehouse", "s3a://picarro/fenceline/iceberg")
-        .config("spark.hadoop.fs.s3a.access.key", "temp")
-        .config("spark.hadoop.fs.s3a.secret.key", "temp")
+        .config("spark.sql.catalog.my_catalog.warehouse", "s3a://picarro/fenceline/iceberg/")
+        .config("spark.hadoop.fs.s3a.access.key", "test")
+        .config("spark.hadoop.fs.s3a.secret.key", "test")
         .config("spark.hadoop.fs.s3a.endpoint",
             "http://sc-fenceline-int-dev3.corp.picarro.com:4566")
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.aws.credentials.provider",
             "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
         .config("spark.hadoop.fs.s3a.path.style.access",
-            "true").getOrCreate();
+            "true").config("spark.executor.memory", "4g")
+        .config("spark.dynamicAllocation.enabled", "true")
+        .config("spark.dynamicAllocation.minExecutors", "1")
+        .config("spark.dynamicAllocation.maxExecutors", "2")
+        .config("spark.scheduler.mode", "FAIR")
+        .config("spark.executor.cores", "2")
+        .config("spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+        .getOrCreate();
 
-//    spark.sparkContext().setLogLevel("DEBUG");
+    spark.sparkContext().setLogLevel("DEBUG");
 
-    String table = "my_catalog.db.anemometer_reading";
+    String table = "my_catalog.db.op_status";
 
     Dataset<Row> df = spark.read()
         .format("iceberg")
         .load(table)
-        .filter("system_id = '110791e3-47b3-460f-84e5-0caae7ae9ff8'")
-        .filter(
-            "timestamp >= '2025-04-22T15:19:16.266Z' AND timestamp <= '2025-04-22T15:19:26.531Z'");
+        .filter("system_id = '110791e3-47b3-460f-84e5-0caae7ae9ff8'");
+//        .filter(
+//            "timestamp == '2025-04-28T07:49:07.000Z'");
 
-    df.select("wind_speed", "wind_direction")
-        .collectAsList()
+    List<Row> rowsList = df.collectAsList();
+
+    df.collectAsList()
         .forEach(row -> {
           Double speed = row.getAs("wind_speed");
           Double direction = row.getAs("wind_direction");
